@@ -8,16 +8,16 @@ struct FCSSpawnActorParameters
 	GENERATED_BODY()
 	
 	UPROPERTY()
-	AActor* Owner;
+	AActor* Owner = nullptr;
 
 	UPROPERTY()
-	APawn* Instigator;
+	APawn* Instigator = nullptr;
 
 	UPROPERTY()
-	AActor* Template;
+	AActor* Template = nullptr;
 
 	UPROPERTY()
-	ESpawnActorCollisionHandlingMethod SpawnMethod;
+	ESpawnActorCollisionHandlingMethod SpawnMethod = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 };
 
 UCLASS(meta = (Internal))

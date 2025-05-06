@@ -30,7 +30,7 @@ public enum PropertyType
     DefaultComponent,
     LazyObject,
     WeakObject,
-    
+
     ScriptInterface,
 
     SoftClass,
@@ -43,10 +43,15 @@ public enum PropertyType
     Array,
     Map,
     Set,
-        
+
     String,
     Name,
     Text,
+
+    GameplayTag,
+    GameplayTagContainer,
+
+    FieldPath,
 
     InternalNativeFixedSizeArray,
     InternalManagedFixedSizeArray

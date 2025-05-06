@@ -44,13 +44,15 @@ enum class ECSPropertyType : uint8
 	Array,
 	Map,
 	Set,
-        
+
 	String,
 	Name,
 	Text,
 
 	GameplayTag,
 	GameplayTagContainer,
+
+	FieldPath,
 
 	InternalNativeFixedSizeArray,
 	InternalManagedFixedSizeArray

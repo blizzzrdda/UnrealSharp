@@ -15,8 +15,12 @@ FGameplayAttribute UCSGameplayAttributeExtensions::FindGameplayAttributeFromClas
 	if (Prop == nullptr)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to find attribute %s"), *FieldName.ToString());
+		return FGameplayAttribute();
 	}
-	return Prop;
+
+	FGameplayAttribute Attribute;
+	Attribute.SetUProperty(Prop);
+	return Attribute;
 }
 
 bool UCSGameplayAttributeExtensions::IsGameplayAttributeValid(const FGameplayAttribute& Attribute)

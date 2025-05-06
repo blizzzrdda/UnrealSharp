@@ -9,7 +9,7 @@ public static class PropertyTranslatorManager
     private static readonly Dictionary<Type, List<PropertyTranslator>?> RegisteredTranslators = new();
     public static readonly List<string> BlittableTypes = new();
     public static readonly List<string> NativelyCopyableTypes = new();
-    
+
     static PropertyTranslatorManager()
     {
         BlittableTypes.Add("EStreamingSourcePriority");
@@ -17,11 +17,11 @@ public static class PropertyTranslatorManager
 
         NativelyCopyableTypes.Add("FMoverDataCollection");
 
-        
+
         EnumPropertyTranslator enumPropertyTranslator = new();
         AddPropertyTranslator(typeof(UhtEnumProperty), enumPropertyTranslator);
         AddPropertyTranslator(typeof(UhtByteProperty), enumPropertyTranslator);
-        
+
         AddBlittablePropertyTranslator(typeof(UhtInt8Property), "sbyte");
         AddBlittablePropertyTranslator(typeof(UhtInt16Property), "short");
         AddBlittablePropertyTranslator(typeof(UhtInt64Property), "long");
@@ -39,35 +39,35 @@ public static class PropertyTranslatorManager
         AddPropertyTranslator(typeof(UhtMulticastDelegateProperty), multicastDelegatePropertyTranslator);
         AddPropertyTranslator(typeof(UhtMulticastInlineDelegateProperty), multicastDelegatePropertyTranslator);
         AddPropertyTranslator(typeof(UhtDelegateProperty), new SinglecastDelegatePropertyTranslator());
-        
+
         AddBlittablePropertyTranslator(typeof(UhtByteProperty), "byte");
-        
+
         AddPropertyTranslator(typeof(UhtBoolProperty), new BoolPropertyTranslator());
         AddPropertyTranslator(typeof(UhtStrProperty), new StringPropertyTranslator());
         AddPropertyTranslator(typeof(UhtNameProperty), new NamePropertyTranslator());
         AddPropertyTranslator(typeof(UhtTextProperty), new TextPropertyTranslator());
-        
+
         AddPropertyTranslator(typeof(UhtWeakObjectPtrProperty), new WeakObjectPropertyTranslator());
-        
+
         WorldContextObjectPropertyTranslator worldContextObjectPropertyTranslator = new();
         AddPropertyTranslator(typeof(UhtObjectPropertyBase), worldContextObjectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtObjectPtrProperty), worldContextObjectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtObjectProperty), worldContextObjectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtLazyObjectPtrProperty), worldContextObjectPropertyTranslator);
-        
+
         ObjectPropertyTranslator objectPropertyTranslator = new();
         AddPropertyTranslator(typeof(UhtObjectPropertyBase), objectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtObjectPtrProperty), objectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtObjectProperty), objectPropertyTranslator);
         AddPropertyTranslator(typeof(UhtLazyObjectPtrProperty), objectPropertyTranslator);
-        
+
         AddPropertyTranslator(typeof(UhtInterfaceProperty), new InterfacePropertyTranslator());
-        
+
         AddPropertyTranslator(typeof(UhtClassProperty), new ClassPropertyTranslator());
         AddPropertyTranslator(typeof(UhtClassPtrProperty), new ClassPropertyTranslator());
         AddPropertyTranslator(typeof(UhtSoftClassProperty), new SoftClassPropertyTranslator());
         AddPropertyTranslator(typeof(UhtSoftObjectProperty), new SoftObjectPropertyTranslator());
-        
+
         AddBlittableCustomStructPropertyTranslator("FVector2f", "UnrealSharp.CoreUObject.FVector2f");
         AddBlittableCustomStructPropertyTranslator("FVector3f", "UnrealSharp.CoreUObject.FVector3f");
         AddBlittableCustomStructPropertyTranslator("FVector_NetQuantize", "UnrealSharp.CoreUObject.FVector");
@@ -79,29 +79,35 @@ public static class PropertyTranslatorManager
         AddBlittableCustomStructPropertyTranslator("FMatrix44f", "UnrealSharp.CoreUObject.FMatrix44f");
         AddBlittableCustomStructPropertyTranslator("FRotator", "UnrealSharp.CoreUObject.FRotator");
         AddBlittableCustomStructPropertyTranslator("FTransform", "UnrealSharp.CoreUObject.FTransform");
-        
+
         AddBlittableCustomStructPropertyTranslator("FTimerHandle", "UnrealSharp.Engine.FTimerHandle");
         AddBlittableCustomStructPropertyTranslator("FInputActionValue", "UnrealSharp.EnhancedInput.FInputActionValue");
-        
+
         AddPropertyTranslator(typeof(UhtArrayProperty), new ArrayPropertyTranslator());
         AddPropertyTranslator(typeof(UhtMapProperty), new MapPropertyTranslator());
         AddPropertyTranslator(typeof(UhtSetProperty), new SetPropertyTranslator());
-        
+
         AddPropertyTranslator(typeof(UhtStructProperty), new BlittableStructPropertyTranslator());
         AddPropertyTranslator(typeof(UhtStructProperty), new StructPropertyTranslator());
-        
+
+        // Add support for TFieldPath<FProperty>
+        AddPropertyTranslator(typeof(UhtStructProperty), new FieldPathPropertyTranslator());
+
+        // Add support for FGameplayAttribute
+        AddPropertyTranslator(typeof(UhtStructProperty), new GameplayAttributePropertyTranslator());
+
         // Manually exported properties
         InclusionLists.BanProperty("UWorld", "GameState");
         InclusionLists.BanProperty("UWorld", "AuthorityGameMode");
     }
-    
+
     public static PropertyTranslator? GetTranslator(UhtProperty property)
     {
         if (!RegisteredTranslators.TryGetValue(property.GetType(), out var translator))
         {
             return null;
         }
-        
+
         foreach (PropertyTranslator propertyTranslator in translator!)
         {
             if (propertyTranslator.CanExport(property))
@@ -109,10 +115,10 @@ public static class PropertyTranslatorManager
                 return propertyTranslator;
             }
         }
-        
+
         return null;
     }
-    
+
     public static void AddBlittablePropertyTranslator(Type propertyType, string managedType)
     {
         if (RegisteredTranslators.TryGetValue(propertyType, out var translators))
@@ -120,7 +126,7 @@ public static class PropertyTranslatorManager
             translators!.Add(new BlittableTypePropertyTranslator(propertyType, managedType));
             return;
         }
-        
+
         RegisteredTranslators.Add(propertyType, new List<PropertyTranslator> {new BlittableTypePropertyTranslator(propertyType, managedType)});
     }
 
@@ -131,10 +137,10 @@ public static class PropertyTranslatorManager
             translators!.Add(translator);
             return;
         }
-        
+
         RegisteredTranslators.Add(propertyClass, new List<PropertyTranslator> {translator});
     }
-    
+
     private static void AddBlittableCustomStructPropertyTranslator(string nativeName, string managedType)
     {
         AddPropertyTranslator(typeof(UhtStructProperty), new BlittableCustomStructTypePropertyTranslator(nativeName, managedType));

@@ -1,10 +1,15 @@
+using System.Runtime.InteropServices;
 using UnrealSharp.CoreUObject;
+using UnrealSharp.Extensions.GameplayAttributes;
 using UnrealSharp.UnrealSharpCore;
 
 namespace UnrealSharp.GameplayAbilities;
 
+[StructLayout(LayoutKind.Sequential)]
 public partial struct FGameplayAttribute
 {
+    // Note: The actual fields (Property, AttributeOwner, AttributeName) are defined in the generated code
+
     public FGameplayAttribute(Type parentClass, FName propertyName)
     {
         this = UCSGameplayAttributeExtensions.FindGameplayAttributeFromClassAndPropertyNameChecked(parentClass,

@@ -125,6 +125,7 @@ private:
     void WaitUpdateAssetTypes();
 
     void ProcessGameplayTags();
+    void ProcessGameplayAttributes();
     void ProcessAssetIds();
     void ProcessAssetTypes();
     void ProcessTraceTypeQuery();

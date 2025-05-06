@@ -14,9 +14,10 @@ public static class PropertyTranslatorManager
     {
         BlittableTypes.Add("EStreamingSourcePriority");
         BlittableTypes.Add("ETriggerEvent");
-        
+
         NativelyCopyableTypes.Add("FMoverDataCollection");
 
+        
         EnumPropertyTranslator enumPropertyTranslator = new();
         AddPropertyTranslator(typeof(UhtEnumProperty), enumPropertyTranslator);
         AddPropertyTranslator(typeof(UhtByteProperty), enumPropertyTranslator);

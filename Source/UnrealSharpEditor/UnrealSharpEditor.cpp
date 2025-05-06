@@ -1,5 +1,8 @@
 ﻿#include "UnrealSharpEditor.h"
+
+#include "AbilitySystemComponent.h"
 #include "AssetToolsModule.h"
+#include "AttributeSet.h"
 #include "BlueprintCompilationManager.h"
 #include "BlueprintEditorLibrary.h"
 #include "CSCommands.h"
@@ -493,6 +496,7 @@ void FUnrealSharpEditorModule::OnRefreshRuntimeGlue()
 {
 	ProcessAssetIds();
 	ProcessGameplayTags();
+	ProcessGameplayAttributes();
 	ProcessAssetTypes();
 	ProcessTraceTypeQuery();
 
@@ -1002,6 +1006,86 @@ void FUnrealSharpEditorModule::ProcessGameplayTags()
 
 	ScriptBuilder.CloseBrace();
 	SaveRuntimeGlue(ScriptBuilder, TEXT("GameplayTags"));
+}
+
+//Reference: SAttributeListWidget::UpdatePropertyOptions()
+void FUnrealSharpEditorModule::ProcessGameplayAttributes()
+{
+	TArray<FGameplayAttribute> AllAttributes;
+	
+	// Gather all UAttribute classes
+	for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+	{
+		UClass *Class = *ClassIt;
+		if (Class->IsChildOf(UAttributeSet::StaticClass()) && !Class->ClassGeneratedBy)
+		{
+			// Allow entire classes to be filtered globally
+			if (Class->HasMetaData(TEXT("HideInDetailsView")))
+			{
+				continue;
+			}
+
+			for (TFieldIterator<FProperty> PropertyIt(Class, EFieldIteratorFlags::ExcludeSuper); PropertyIt; ++PropertyIt)
+			{
+				FProperty *Property = *PropertyIt;
+
+				// Allow properties to be filtered globally (never show up)
+				if (Property->HasMetaData(TEXT("HideInDetailsView")))
+				{
+					continue;
+				}
+
+				FGameplayAttribute& NewAttribute = AllAttributes.AddDefaulted_GetRef();
+				NewAttribute.SetUProperty(Property);
+			}
+		}
+
+		// UAbilitySystemComponent can add 'system' attributes
+		// if (Class->IsChildOf(UAbilitySystemComponent::StaticClass()) && !Class->ClassGeneratedBy)
+		// {
+		// 	for (TFieldIterator<FProperty> PropertyIt(Class, EFieldIteratorFlags::ExcludeSuper); PropertyIt; ++PropertyIt)
+		// 	{
+		// 		FProperty* Property = *PropertyIt;
+		//
+		// 		// SystemAttributes have to be explicitly tagged
+		// 		if (Property->HasMetaData(TEXT("SystemGameplayAttribute")) == false)
+		// 		{
+		// 			continue;
+		// 		}
+		//
+		// 		FGameplayAttribute& NewAttribute = AllAttributes.AddDefaulted_GetRef();
+		// 		NewAttribute.SetUProperty(Property);
+		// 	}
+		// }
+
+		// CS Script builder
+		FCSScriptBuilder ScriptBuilder(FCSScriptBuilder::IndentType::Tabs);
+		ScriptBuilder.AppendLine(TEXT("using UnrealSharp.GameplayAbilities;"));
+		ScriptBuilder.AppendLine();
+		ScriptBuilder.AppendLine(TEXT("public static class GameplayAttributes"));
+		ScriptBuilder.OpenBrace();
+
+		
+		TMap<FName, FName> AttributeNames; // <UAttributeSet, AttributeName>
+		for (const FGameplayAttribute& Attribute : AllAttributes)
+		{
+			if (AttributeNames.Contains(Attribute.GetUProperty()->GetOwnerClass()->GetFName()) &&
+					AttributeNames[Attribute.GetUProperty()->GetOwnerClass()->GetFName()] == Attribute.GetUProperty()->GetFName())
+			{
+				continue;
+			}
+
+			FString AttributeName = Attribute.GetUProperty()->GetOwnerClass()->GetName() + "_" + Attribute.GetUProperty()->GetName();
+			ScriptBuilder.AppendLine(FString::Printf(TEXT("public static readonly FGameplayAttribute %s = new(typeof(U%s), \"%s\");"),
+				*AttributeName,
+				*Attribute.GetUProperty()->GetOwnerClass()->GetName(), *Attribute.GetUProperty()->GetName()));
+
+			AttributeNames.Add(Attribute.GetUProperty()->GetOwnerClass()->GetFName(), Attribute.GetUProperty()->GetFName());
+		}
+
+		ScriptBuilder.CloseBrace();
+		SaveRuntimeGlue(ScriptBuilder, TEXT("GameplayAttributes"));
+	}
 }
 
 FString ReplaceSpecialCharacters(const FString& Input)

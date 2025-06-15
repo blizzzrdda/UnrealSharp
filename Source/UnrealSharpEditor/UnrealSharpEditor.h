@@ -4,6 +4,10 @@
 #include "Modules/ModuleManager.h"
 #include "Containers/Ticker.h"
 
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wignored-attributes"
+#endif
+
 enum ECSLoggerVerbosity : uint8;
 class UCSInterface;
 class UCSEnum;
@@ -28,10 +32,17 @@ enum HotReloadStatus
 
 struct FCSManagedUnrealSharpEditorCallbacks
 {
-    FCSManagedUnrealSharpEditorCallbacks() : Build(nullptr) {}
+    FCSManagedUnrealSharpEditorCallbacks() : Build(nullptr), ForceManagedGC(nullptr)
+    {
+    }
 
     using FBuildProject = bool(__stdcall*)(const TCHAR*, const TCHAR*, const TCHAR*, void*, ECSLoggerVerbosity, void*, bool);
+    using FForceManagedGC = void(__stdcall*)();
+    using FOpenSolution = bool(__stdcall*)(const TCHAR*, void*);
+
     FBuildProject Build;
+    FForceManagedGC ForceManagedGC;
+    FOpenSolution OpenSolution;
 };
 
 
@@ -61,7 +72,7 @@ public:
     FOnRefreshRuntimeGlue& OnRefreshRuntimeGlueEvent() { return OnRefreshRuntimeGlueDelegate; }
     
     void SaveRuntimeGlue(const FCSScriptBuilder& ScriptBuilder, const FString& FileName, const FString& Suffix = FString(TEXT(".cs")));
-    static void OpenSolution();
+    void OpenSolution();
 
     static bool FillTemplateFile(const FString& TemplateName, TMap<FString, FString>& Replacements, const FString& Path);
 
@@ -77,9 +88,11 @@ private:
     static void OnCreateNewProject();
     static void OnCompileManagedCode();
     static void OnReloadManagedCode();
-    static void OnRegenerateSolution();
-    static void OnOpenSolution();
+    void OnRegenerateSolution();
+    void OnOpenSolution();
     static void OnPackageProject();
+    static void OnMergeManagedSlnAndNativeSln();
+
     static void OnOpenSettings();
     static void OnOpenDocumentation();
     static void OnReportBug();
@@ -120,7 +133,7 @@ private:
     void OnCollisionProfileLoaded(UCollisionProfile* Profile);
     void OnAssetManagerSettingsChanged(UObject* Object, FPropertyChangedEvent& PropertyChangedEvent);
 
-    void OnPIEEnded(bool IsSimulating);
+    void OnPIEShutdown(bool IsSimulating);
 
     void WaitUpdateAssetTypes();
 

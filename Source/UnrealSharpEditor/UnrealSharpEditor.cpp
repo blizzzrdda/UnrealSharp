@@ -73,7 +73,7 @@ void FUnrealSharpEditorModule::StartupModule()
 	Manager->OnNewClassEvent().AddRaw(this, &FUnrealSharpEditorModule::OnClassRebuilt);
 	Manager->OnNewEnumEvent().AddRaw(this, &FUnrealSharpEditorModule::OnEnumRebuilt);
 
-	FEditorDelegates::EndPIE.AddRaw(this, &FUnrealSharpEditorModule::OnPIEEnded);
+	FEditorDelegates::ShutdownPIE.AddRaw(this, &FUnrealSharpEditorModule::OnPIEShutdown);
 
 	TickDelegate = FTickerDelegate::CreateRaw(this, &FUnrealSharpEditorModule::Tick);
 	TickDelegateHandle = FTSTicker::GetCoreTicker().AddTicker(TickDelegate);
@@ -118,8 +118,6 @@ void FUnrealSharpEditorModule::StartupModule()
 
 	UCSManager& CSharpManager = UCSManager::Get();
 	CSharpManager.LoadPluginAssemblyByName(TEXT("UnrealSharp.Editor"));
-
-	StartHotReload(true, false);
 }
 
 void FUnrealSharpEditorModule::ShutdownModule()
@@ -336,6 +334,75 @@ void FUnrealSharpEditorModule::OnOpenSolution()
 void FUnrealSharpEditorModule::OnPackageProject()
 {
 	PackageProject();
+}
+
+void FUnrealSharpEditorModule::OnMergeManagedSlnAndNativeSln()
+{
+	static FString NativeSolutionPath = FPaths::ProjectDir() / FApp::GetProjectName() + ".sln";
+	static FString ManagedSolutionPath = FPaths::ConvertRelativePathToFull(FCSProcHelper::GetPathToSolution());
+
+	if (!FPaths::FileExists(NativeSolutionPath))
+	{
+		FString DialogText = FString::Printf(TEXT("Failed to load native solution %s"), *NativeSolutionPath);
+		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(DialogText));
+		return;
+	}
+
+	if (!FPaths::FileExists(ManagedSolutionPath))
+	{
+		FString DialogText = FString::Printf(TEXT("Failed to load managed solution %s"), *ManagedSolutionPath);
+		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(DialogText));
+		return;
+	}
+
+	TArray<FString> NativeSlnFileLines;
+	FFileHelper::LoadFileToStringArray(NativeSlnFileLines, *NativeSolutionPath);
+
+	int32 LastEndProjectIdx = 0;
+
+	for (int32 idx = 0; idx < NativeSlnFileLines.Num(); ++idx)
+	{
+		FString Line = NativeSlnFileLines[idx];
+		Line.ReplaceInline(TEXT("\n"), TEXT(""));
+		if (Line == TEXT("EndProject"))
+		{
+			LastEndProjectIdx = idx;
+		}
+	}
+
+	TArray<FString> ManagedSlnFileLines;
+	FFileHelper::LoadFileToStringArray(ManagedSlnFileLines, *ManagedSolutionPath);
+
+	TArray<FString> ManagedProjectLines;
+
+	for (int32 idx = 0; idx < ManagedSlnFileLines.Num(); ++idx)
+	{
+		FString Line = ManagedSlnFileLines[idx];
+		Line.ReplaceInline(TEXT("\n"), TEXT(""));
+		if (Line.StartsWith(TEXT("Project(\"{")) || Line.StartsWith(TEXT("EndProject")))
+		{
+			ManagedProjectLines.Add(Line);
+		}
+	}
+
+	for (int32 idx = 0; idx < ManagedProjectLines.Num(); ++idx)
+	{
+		FString Line = ManagedProjectLines[idx];
+		if (Line.StartsWith(TEXT("Project(\"{")) && Line.Contains(TEXT(".csproj")))
+		{
+			TArray<FString> ProjectStrParts;
+			Line.ParseIntoArray(ProjectStrParts, TEXT(", "));
+			if(ProjectStrParts.Num() == 3 && ProjectStrParts[1].Contains(TEXT(".csproj")))
+			{
+				ProjectStrParts[1] = FString("\"Script\\") + ProjectStrParts[1].Mid(1);
+				Line = FString::Join(ProjectStrParts, TEXT(", "));
+			}
+		}
+		NativeSlnFileLines.Insert(Line, LastEndProjectIdx + 1 + idx);
+	}
+
+	FString MixedSlnPath = NativeSolutionPath.LeftChop(4) + FString(".Mixed.sln");
+	FFileHelper::SaveStringArrayToFile(NativeSlnFileLines, *MixedSlnPath);
 }
 
 void FUnrealSharpEditorModule::OnOpenSettings()
@@ -578,8 +645,12 @@ void FUnrealSharpEditorModule::OpenSolution()
 		OnRegenerateSolution();
 	}
 
-	FString OpenSolutionArgs = FString::Printf(TEXT("/c \"%s\""), *SolutionPath);
-	FPlatformProcess::CreateProc(TEXT("cmd.exe"), *OpenSolutionArgs, true, true, false, nullptr, 0, nullptr, nullptr);
+	FString ExceptionMessage;
+	if (!ManagedUnrealSharpEditorCallbacks.OpenSolution(*SolutionPath, &ExceptionMessage))
+	{
+		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(ExceptionMessage), FText::FromString(TEXT("Opening C# Project Failed")));
+		return;
+	}
 };
 
 FString FUnrealSharpEditorModule::SelectArchiveDirectory()
@@ -629,6 +700,9 @@ TSharedRef<SWidget> FUnrealSharpEditorModule::GenerateUnrealSharpMenu()
 
 	MenuBuilder.AddMenuEntry(CSCommands.RegenerateSolution, NAME_None, TAttribute<FText>(), TAttribute<FText>(),
 	                         FSourceCodeNavigation::GetOpenSourceCodeIDEIcon());
+
+	MenuBuilder.AddMenuEntry(CSCommands.MergeManagedSlnAndNativeSln, NAME_None, TAttribute<FText>(), TAttribute<FText>(),
+							 FSourceCodeNavigation::GetOpenSourceCodeIDEIcon());
 
 	MenuBuilder.EndSection();
 
@@ -721,9 +795,11 @@ void FUnrealSharpEditorModule::RegisterCommands()
 	UnrealSharpCommands->MapAction(FCSCommands::Get().ReloadManagedCode,
 	                               FExecuteAction::CreateStatic(&FUnrealSharpEditorModule::OnReloadManagedCode));
 	UnrealSharpCommands->MapAction(FCSCommands::Get().RegenerateSolution,
-	                               FExecuteAction::CreateStatic(&FUnrealSharpEditorModule::OnRegenerateSolution));
+	                               FExecuteAction::CreateRaw(this, &FUnrealSharpEditorModule::OnRegenerateSolution));
 	UnrealSharpCommands->MapAction(FCSCommands::Get().OpenSolution,
-	                               FExecuteAction::CreateStatic(&FUnrealSharpEditorModule::OnOpenSolution));
+	                               FExecuteAction::CreateRaw(this, &FUnrealSharpEditorModule::OnOpenSolution));
+	UnrealSharpCommands->MapAction(FCSCommands::Get().MergeManagedSlnAndNativeSln,
+								   FExecuteAction::CreateStatic(&FUnrealSharpEditorModule::OnMergeManagedSlnAndNativeSln));
 	UnrealSharpCommands->MapAction(FCSCommands::Get().PackageProject,
 	                               FExecuteAction::CreateStatic(&FUnrealSharpEditorModule::OnPackageProject));
 	UnrealSharpCommands->MapAction(FCSCommands::Get().OpenSettings,
@@ -903,22 +979,21 @@ void FUnrealSharpEditorModule::OnAssetManagerSettingsChanged(UObject* Object,
 		FTimerDelegate::CreateRaw(this, &FUnrealSharpEditorModule::ProcessAssetTypes));
 }
 
-void FUnrealSharpEditorModule::OnPIEEnded(bool IsSimulating)
+void FUnrealSharpEditorModule::OnPIEShutdown(bool IsSimulating)
 {
-	if (!bHasQueuedHotReload)
+	// Replicate UE behavior, which forces a garbage collection when exiting PIE.
+	ManagedUnrealSharpEditorCallbacks.ForceManagedGC();
+	
+	if (bHasQueuedHotReload)
 	{
-		return;
+		bHasQueuedHotReload = false;
+		StartHotReload();
 	}
-
-	bHasQueuedHotReload = false;
-	StartHotReload();
 }
 
-bool FUnrealSharpEditorModule::FillTemplateFile(const FString& TemplateName, TMap<FString, FString>& Replacements,
-                                                const FString& Path)
+bool FUnrealSharpEditorModule::FillTemplateFile(const FString& TemplateName, TMap<FString, FString>& Replacements, const FString& Path)
 {
-	const FString FullFileName = FCSProcHelper::GetPluginDirectory() / TEXT("Templates") / TemplateName + TEXT(
-		".cs.template");
+	const FString FullFileName = FCSProcHelper::GetPluginDirectory() / TEXT("Templates") / TemplateName + TEXT(".cs.template");
 
 	FString OutTemplate;
 	if (FFileHelper::LoadFileToString(OutTemplate, *FullFileName))

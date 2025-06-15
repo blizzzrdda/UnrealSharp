@@ -20,7 +20,11 @@ void FCSBindsManager::RegisterExportedFunction(const FName& ClassName, const FCS
 	ExportedFunctions.Add(ExportedFunction);
 }
 
-void* FCSBindsManager::GetBoundFunction(TCHAR* InOuterName, TCHAR* InFunctionName, int32 ManagedFunctionSize)
+#if PLATFORM_WINDOWS
+void* FCSBindsManager::GetBoundFunction(const TCHAR* InOuterName, const TCHAR* InFunctionName, int32 ManagedFunctionSize)
+#else
+void* FCSBindsManager::GetBoundFunction(const char* InOuterName, const char* InFunctionName, int32 ManagedFunctionSize)
+#endif
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UCSBindsManager::GetBoundFunction);
 	
@@ -29,10 +33,10 @@ void* FCSBindsManager::GetBoundFunction(TCHAR* InOuterName, TCHAR* InFunctionNam
 	FName ManagedFunctionName = FName(InFunctionName);
 	
 	TArray<FCSExportedFunction>* ExportedFunctions = Instance->ExportedFunctionsMap.Find(ManagedOuterName);
-	
+
 	if (!ExportedFunctions)
 	{
-		UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: No exported functions found for %s"), InOuterName);
+		UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: No exported functions found for %s"), *ManagedOuterName.ToString());
 		return nullptr;
 	}
 
@@ -45,13 +49,13 @@ void* FCSBindsManager::GetBoundFunction(TCHAR* InOuterName, TCHAR* InFunctionNam
 			
 		if (NativeFunction.Size != ManagedFunctionSize)
 		{
-			UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: Function size mismatch for %s::%s."), InOuterName, InFunctionName);
+			UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: Function size mismatch for %s::%s."), *ManagedOuterName.ToString(), *ManagedFunctionName.ToString());
 			return nullptr;
 		}
 			
 		return NativeFunction.FunctionPointer;
 	}
 
-	UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: No function found for %s.%s"), InOuterName, InFunctionName);
+	UE_LOG(LogUnrealSharpBinds, Error, TEXT("Failed to get BoundNativeFunction: No function found for %s.%s"), *ManagedOuterName.ToString(), *ManagedFunctionName.ToString());
 	return nullptr;
 }

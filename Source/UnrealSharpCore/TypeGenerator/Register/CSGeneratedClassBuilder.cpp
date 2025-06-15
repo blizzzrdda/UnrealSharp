@@ -141,20 +141,20 @@ FName FCSGeneratedClassBuilder::GetFieldName() const
 
 void FCSGeneratedClassBuilder::ManagedObjectConstructor(const FObjectInitializer& ObjectInitializer)
 {
-	UCSClass* ManagedClass = GetFirstManagedClass(ObjectInitializer.GetClass());
-	UClass* NativeClass = GetFirstNativeClass(ManagedClass);
-
+	UCSClass* FirstManagedClass = GetFirstManagedClass(ObjectInitializer.GetClass());
+	UClass* FirstNativeClass = GetFirstNativeClass(FirstManagedClass);
+	
 	//Execute the native class' constructor first.
-	NativeClass->ClassConstructor(ObjectInitializer);
+	FirstNativeClass->ClassConstructor(ObjectInitializer);
 
 	// Initialize managed properties that are not zero initialized such as FText.
-	for (TFieldIterator<FProperty> PropertyIt(ManagedClass); PropertyIt; ++PropertyIt)
+	for (TFieldIterator<FProperty> PropertyIt(FirstManagedClass); PropertyIt; ++PropertyIt)
 	{
 		FProperty* Property = *PropertyIt;
 
-		if (Property->GetOwnerClass() == NativeClass)
+		if (Property->GetOwnerClass() == FirstNativeClass)
 		{
-			// Break if we reach the first native class
+			// We don't want to initialize properties that are not from a managed class
 			break;
 		}
 		
@@ -166,7 +166,7 @@ void FCSGeneratedClassBuilder::ManagedObjectConstructor(const FObjectInitializer
 		Property->InitializeValue_InContainer(ObjectInitializer.GetObj());
 	}
 
-	TSharedPtr<FCSAssembly> OwningAssembly = ManagedClass->GetOwningAssembly();
+	TSharedPtr<FCSAssembly> OwningAssembly = FirstManagedClass->GetOwningAssembly();
 	OwningAssembly->FindOrCreateManagedObject(ObjectInitializer.GetObj());
 }
 
@@ -248,9 +248,16 @@ void FCSGeneratedClassBuilder::SetConfigName(UClass* ManagedClass, const TShared
 	}
 }
 
+bool IsNativeClass(UClass* Class)
+{
+	return Class->GetClass() == UClass::StaticClass();
+}
+
 UCSClass* FCSGeneratedClassBuilder::GetFirstManagedClass(UClass* Class)
 {
-	if (Class->HasAnyClassFlags(CLASS_Native))
+	TRACE_CPUPROFILER_EVENT_SCOPE(FCSGeneratedClassBuilder::GetFirstManagedClass);
+	
+	if (IsNativeClass(Class))
 	{
 		return nullptr;
 	}
@@ -258,26 +265,38 @@ UCSClass* FCSGeneratedClassBuilder::GetFirstManagedClass(UClass* Class)
 	while (Class && !IsManagedType(Class))
 	{
 		Class = Class->GetSuperClass();
+
+		if (IsNativeClass(Class))
+		{
+			// We've already reached a native class, so we can stop searching.
+			return nullptr;
+		}
 	}
 	
-	return Cast<UCSClass>(Class);
+	return (UCSClass*) Class;
 }
 
 UClass* FCSGeneratedClassBuilder::GetFirstNativeClass(UClass* Class)
 {
-	while (!Class->HasAnyClassFlags(CLASS_Native) || IsManagedType(Class))
+	TRACE_CPUPROFILER_EVENT_SCOPE(FCSGeneratedClassBuilder::GetFirstNativeClass);
+	
+	while (!IsNativeClass(Class))
 	{
 		Class = Class->GetSuperClass();
 	}
+	
 	return Class;
 }
 
 UClass* FCSGeneratedClassBuilder::GetFirstNonBlueprintClass(UClass* Class)
 {
-	while (Class->HasAnyClassFlags(CLASS_CompiledFromBlueprint) && !IsManagedType(Class))
+	TRACE_CPUPROFILER_EVENT_SCOPE(FCSGeneratedClassBuilder::GetFirstNonBlueprintClass);
+	
+	while (Class->GetClass() == UBlueprintGeneratedClass::StaticClass())
 	{
 		Class = Class->GetSuperClass();
 	}
+	
 	return Class;
 }
 

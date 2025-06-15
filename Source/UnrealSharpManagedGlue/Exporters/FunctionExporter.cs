@@ -19,7 +19,6 @@ public enum EFunctionProtectionMode
 {
     UseUFunctionProtection,
     OverrideWithInternal,
-    OverrideWithProtected,
 }
 
 public struct ExtensionMethod
@@ -72,6 +71,8 @@ public class FunctionExporter
     protected OverloadMode _overloadMode = OverloadMode.AllowOverloads;
     protected EFunctionProtectionMode _protectionMode = EFunctionProtectionMode.UseUFunctionProtection;
     protected EBlueprintVisibility _blueprintVisibility = EBlueprintVisibility.Call;
+
+    protected bool BlittableFunction;
     
     public string Modifiers { get; private set; } = "";
     
@@ -137,12 +138,19 @@ public class FunctionExporter
         _blueprintVisibility = blueprintVisibility;
 
         _parameterTranslators = new List<PropertyTranslator>(_function.Children.Count);
-
+        
+        bool isBlittable = true;
         foreach (UhtProperty parameter in _function.Properties)
         {
             PropertyTranslator translator = PropertyTranslatorManager.GetTranslator(parameter)!;
             _parameterTranslators.Add(translator);
+
+            if (!translator.IsBlittable && isBlittable)
+            {
+                isBlittable = false;
+            }
         }
+        BlittableFunction = isBlittable;
 
         _hasGenericTypeSupport = _function.HasGenericTypeSupport();
 
@@ -160,7 +168,7 @@ public class FunctionExporter
         {
             if (_function.HasParametersOrReturnValue())
             {
-                _customInvoke = "ProcessDelegate(ParamsBuffer);";
+                _customInvoke = "ProcessDelegate(paramsBuffer);";
             }
             else
             {
@@ -176,7 +184,7 @@ public class FunctionExporter
 		
             if (_function.IsInterfaceFunction())
             {
-                Modifiers = "public ";
+                Modifiers = ScriptGeneratorUtilities.PublicKeyword;
             }
 
             _invokeFunction = $"{ExporterCallbacks.UObjectCallbacks}.CallInvokeNativeFunction";
@@ -441,10 +449,6 @@ public class FunctionExporter
             overloadMode = OverloadMode.SuppressOverloads;
             blueprintVisibility = EBlueprintVisibility.Event;
         }
-        else if (functionType == FunctionType.InternalWhitelisted)
-        {
-            protectionMode = EFunctionProtectionMode.OverrideWithProtected;
-        }
         else if (functionType == FunctionType.GetterSetter)
         {
             protectionMode = EFunctionProtectionMode.OverrideWithInternal;
@@ -552,7 +556,9 @@ public class FunctionExporter
             {
                 returnAssignment = $"{paramType} returnValue = ";
             }
-            else if (!parameter.HasAnyFlags(EPropertyFlags.ConstParm) && parameter.HasAnyFlags(EPropertyFlags.OutParm))
+            else if (!parameter.HasAnyFlags(EPropertyFlags.ConstParm)
+                    && !parameter.HasAnyFlags(EPropertyFlags.ReferenceParm)
+                    && parameter.HasAnyFlags(EPropertyFlags.OutParm))
             {
                 builder.AppendLine($"{paramType} {parameter.SourceName} = default;");
             }
@@ -637,7 +643,7 @@ public class FunctionExporter
 
         FunctionExporter exporter = new FunctionExporter(function);
         exporter.Initialize(OverloadMode.SuppressOverloads, EFunctionProtectionMode.UseUFunctionProtection, EBlueprintVisibility.Call);
-        exporter.ExportSignature(builder, "public ");
+        exporter.ExportSignature(builder, ScriptGeneratorUtilities.PublicKeyword);
         builder.Append(";");
         
         builder.TryEndWithEditor(function);
@@ -830,7 +836,9 @@ public class FunctionExporter
             }
             else
             {
-                builder.AppendStackAllocFunction($"{_function.SourceName}_ParamsSize", nativeFunctionIntPtr);
+                builder.AppendStackAllocFunction($"{_function.SourceName}_ParamsSize", 
+                    nativeFunctionIntPtr, 
+                    !BlittableFunction);
             }
 
             ForEachParameter((translator, parameter) =>
@@ -853,7 +861,7 @@ public class FunctionExporter
                             offsetName += $"<{string.Join(", ", _customStructParamTypes.GetRange(0, precedingCustomStructParams))}>()";
                         }
                     }
-                    translator.ExportToNative(builder, parameter, parameter.SourceName, "ParamsBuffer", offsetName, propertyName);
+                    translator.ExportToNative(builder, parameter, parameter.SourceName, "paramsBuffer", offsetName, propertyName);
                 }
             });
             
@@ -862,7 +870,7 @@ public class FunctionExporter
             if (string.IsNullOrEmpty(_customInvoke))
             {
                 string invokedFunctionIntPtr = _hasCustomStructParamSupport ? "Specialization" : nativeFunctionIntPtr;
-                builder.AppendLine($"{_invokeFunction}({_invokeFirstArgument}, {invokedFunctionIntPtr}, ParamsBuffer);");
+                builder.AppendLine($"{_invokeFunction}({_invokeFirstArgument}, {invokedFunctionIntPtr}, paramsBuffer);");
             }
             else
             {
@@ -907,7 +915,7 @@ public class FunctionExporter
                         parameter,
                         parameter.SourceName,
                         $"{marshalDestination} =",
-                        "ParamsBuffer",
+                        "paramsBuffer",
                         offsetName,
                         true,
                         parameter.HasAllFlags(EPropertyFlags.ReferenceParm) &&
@@ -1080,24 +1088,21 @@ public class FunctionExporter
         switch (_protectionMode)
         {
             case EFunctionProtectionMode.UseUFunctionProtection:
-                if (_function.HasAllFlags(EFunctionFlags.Public))
+                if (_function.HasAnyFlags(EFunctionFlags.Public | EFunctionFlags.BlueprintCallable))
                 {
-                    Modifiers = "public ";
+                    Modifiers = ScriptGeneratorUtilities.PublicKeyword;
                 }
                 else if (_function.HasAllFlags(EFunctionFlags.Protected) || _function.HasMetadata("BlueprintProtected"))
                 {
-                    Modifiers = "protected ";
+                    Modifiers = ScriptGeneratorUtilities.ProtectedKeyword;
                 }
                 else
                 {
-                    Modifiers = "public ";
+                    Modifiers = ScriptGeneratorUtilities.PrivateKeyword;
                 }
                 break;
             case EFunctionProtectionMode.OverrideWithInternal:
                 Modifiers = "internal ";
-                break;
-            case EFunctionProtectionMode.OverrideWithProtected:
-                Modifiers = "protected ";
                 break;
         }
     }

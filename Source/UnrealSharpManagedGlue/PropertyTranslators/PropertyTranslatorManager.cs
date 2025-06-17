@@ -86,7 +86,10 @@ public static class PropertyTranslatorManager
         AddBlittableCustomStructPropertyTranslator("FTimerHandle", "UnrealSharp.Engine.FTimerHandle");
         AddBlittableCustomStructPropertyTranslator("FInputActionValue", "UnrealSharp.EnhancedInput.FInputActionValue");
         AddBlittableCustomStructPropertyTranslator("FRandomStream", "UnrealSharp.CoreUObject.FRandomStream");
+
+        AddCustomStructPropertyTranslator("FGameplayEffectSpecHandle", "UnrealSharp.GameplayAbilities.FGameplayEffectSpecHandle", "GameplayEffectSpecHandleMarshaller");
         
+        // In the RegisterPropertyTranslators method, add:
         AddPropertyTranslator(typeof(UhtArrayProperty), new ArrayPropertyTranslator());
         AddPropertyTranslator(typeof(UhtMapProperty), new MapPropertyTranslator());
         AddPropertyTranslator(typeof(UhtSetProperty), new SetPropertyTranslator());

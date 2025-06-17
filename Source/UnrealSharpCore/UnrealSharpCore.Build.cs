@@ -33,20 +33,21 @@ public class UnrealSharpCore : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"Slate",
-				"SlateCore", 
-				"Boost", 
+				"SlateCore",
+				"Boost",
 				"XmlParser",
-				"Json", 
+				"Json",
 				"Projects",
-				"UMG", 
-				"DeveloperSettings", 
-				"UnrealSharpProcHelper", 
-				"EnhancedInput", 
+				"UMG",
+				"DeveloperSettings",
+				"UnrealSharpProcHelper",
+				"EnhancedInput",
 				"UnrealSharpUtilities",
-				"GameplayTags", 
+				"GameplayTags",
 				"AIModule",
 				"UnrealSharpBinds",
-				"FieldNotification"
+				"FieldNotification",
+				"GameplayAbilities"
 			}
 			);
 

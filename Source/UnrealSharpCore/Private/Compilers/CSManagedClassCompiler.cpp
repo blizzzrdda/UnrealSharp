@@ -6,6 +6,7 @@
 #include "Types/CSBlueprint.h"
 #include "UObject/UnrealType.h"
 #include "Engine/Blueprint.h"
+#include "GameplayEffect.h"
 #include "Extensions/DeveloperSettings/CSDeveloperSettings.h"
 #include "Types/CSClass.h"
 #include "Factories/CSFunctionFactory.h"
@@ -118,6 +119,15 @@ void UCSManagedClassCompiler::CompileClass(TSharedPtr<FCSClassReflectionData> Cl
 	
 	CreateDeferredManagedCDO(Field);
 	FinalizeManagedCDO(Field);
+
+	// The Blueprint compiler does this in PostCDOCompiled; runtime class compilation bypasses it.
+	if (UGameplayEffect* GameplayEffect = Cast<UGameplayEffect>(Field->GetDefaultObject(false)))
+	{
+		if (!GameplayEffect->HasAnyFlags(RF_NeedPostLoad))
+		{
+			GameplayEffect->OnGameplayEffectChanged();
+		}
+	}
 
 	Field->SetUpRuntimeReplicationData();
 	Field->UpdateCustomPropertyListForPostConstruction();

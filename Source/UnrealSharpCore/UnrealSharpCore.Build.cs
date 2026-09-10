@@ -36,6 +36,7 @@ public class UnrealSharpCore : ModuleRules
 				"UnrealSharpUtilities",
 				"GameplayTags", 
 				"AIModule",
+				"GameplayAbilities",
 				"UnrealSharpBinds",
 				"FieldNotification",
 				"InputCore",

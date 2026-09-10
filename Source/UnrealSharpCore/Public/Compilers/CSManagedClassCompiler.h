@@ -7,6 +7,11 @@
 struct FCSClassReflectionData;
 class UCSClass;
 
+/**
+ * Responsibilities:
+ * - Compiles managed class reflection and initializes managed class defaults.
+ * - Finalizes runtime Gameplay Effect component data when Blueprint compilation is unavailable.
+ */
 UCLASS()
 class UNREALSHARPCORE_API UCSManagedClassCompiler : public UCSManagedTypeCompiler
 {
